@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SK Hynix Terminal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg0: #0a0d12; --bg1: #0f1318; --bg2: #141920; --bg3: #1a2030;
+  --border: #1e2840; --border2: #243050;
+  --orange: #ff7c00; --yellow: #ffcc00;
+  --red: #ff4455; --blue: #4499ff; --cyan: #00d4ff; --purple: #cc88ff;
+  --text: #c8d4e8; --text2: #7a8fa8; --text3: #4a5f78;
+  --up: #00cc88; --down: #ff4455;
+}
+body { background: var(--bg0); color: var(--text); font-family: 'Courier New', Courier, monospace; font-size: 12px; min-height: 100vh; }
+a { color: var(--cyan); }
+
+/* ── TOP BAR ── */
+.topbar { background: #070a0f; border-bottom: 2px solid var(--orange); padding: 8px 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; position: sticky; top: 0; z-index: 100; }
+.logo { color: var(--orange); font-weight: bold; font-size: 15px; letter-spacing: 2px; }
+.ticker-hero { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ticker-sym { color: var(--yellow); font-size: 15px; font-weight: bold; }
+.ticker-price { color: var(--text); font-size: 26px; font-weight: bold; }
+.ticker-chg { font-size: 14px; }
+.ticker-chg.up { color: var(--up); }
+.ticker-chg.dn { color: var(--down); }
+.topbar-right { display: flex; align-items: center; gap: 16px; font-size: 11px; color: var(--text2); flex-wrap: wrap; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--up); display: inline-block; margin-right: 4px; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.refresh-btn { background: transparent; border: 1px solid var(--orange); color: var(--orange); padding: 4px 10px; cursor: pointer; font-family: inherit; font-size: 11px; border-radius: 3px; transition: background 0.15s; }
+.refresh-btn:hover { background: rgba(255,124,0,0.15); }
+.last-updated { color: var(--text3); font-size: 10px; }
+
+/* ── NAV ── */
+.nav { background: #0d1119; border-bottom: 1px solid var(--border); display: flex; gap: 0; overflow-x: auto; }
+.nav-btn { padding: 8px 16px; font-size: 11px; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; font-family: inherit; background: none; border-top: none; border-left: none; border-right: none; transition: color 0.15s; }
+.nav-btn:hover { color: var(--text); }
+.nav-btn.active { color: var(--orange); border-bottom-color: var(--orange); }
+
+/* ── SECTIONS ── */
+.section { display: none; padding: 12px; }
+.section.active { display: block; }
+
+/* ── GRID ── */
+.panels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); }
+.panel { background: var(--bg1); padding: 10px 12px; }
+.panel.wide { grid-column: span 2; }
+.panel.full { grid-column: span 3; }
+@media (max-width: 900px) { .panels { grid-template-columns: 1fr; } .panel.wide, .panel.full { grid-column: span 1; } }
+
+/* ── PANEL TITLES ── */
+.panel-title { color: var(--orange); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; border-bottom: 1px solid var(--border2); padding-bottom: 4px; display: flex; align-items: center; justify-content: space-between; }
+.panel-title span { color: var(--text3); font-size: 10px; text-transform: none; letter-spacing: 0; }
+
+/* ── KPI CARDS ── */
+.kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+.kpi { background: var(--bg2); padding: 7px 10px; border: 1px solid var(--border); border-radius: 3px; }
+.kpi-label { color: var(--text3); font-size: 10px; }
+.kpi-val { color: var(--yellow); font-size: 14px; font-weight: bold; margin-top: 2px; }
+.kpi-sub { color: var(--text2); font-size: 10px; margin-top: 1px; }
+.kpi-val.up { color: var(--up); }
+.kpi-val.dn { color: var(--down); }
+
+/* ── BARS ── */
+.bar-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.bar-label { color: var(--text2); font-size: 10px; width: 90px; flex-shrink: 0; }
+.bar-track { flex: 1; height: 5px; background: var(--bg3); border-radius: 2px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 2px; }
+.bar-val { font-size: 10px; width: 50px; text-align: right; flex-shrink: 0; }
+
+/* ── TABLES / ROWS ── */
+.fin-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 11px; }
+.fin-row:last-child { border-bottom: none; }
+.fin-label { color: var(--text2); }
+.fin-val { color: var(--text); }
+.fin-val.up { color: var(--up); }
+.fin-val.dn { color: var(--down); }
+.fin-val.hi { color: var(--yellow); }
+
+/* ── NEWS ── */
+.news-item { border-bottom: 1px solid var(--border); padding: 7px 0; }
+.news-item:last-child { border-bottom: none; }
+.news-time { color: var(--text3); font-size: 10px; margin-bottom: 2px; }
+.news-head { color: var(--text); font-size: 11px; line-height: 1.5; }
+.news-head a { color: var(--text); text-decoration: none; }
+.news-head a:hover { color: var(--cyan); }
+.news-impact { display: inline-block; padding: 1px 6px; border-radius: 2px; font-size: 9px; margin-top: 3px; font-weight: bold; }
+.impact-bull { background: rgba(0,204,136,0.15); color: var(--up); border: 1px solid rgba(0,204,136,0.3); }
+.impact-bear { background: rgba(255,68,85,0.15); color: var(--down); border: 1px solid rgba(255,68,85,0.3); }
+.impact-neut { background: rgba(68,153,255,0.1); color: var(--blue); border: 1px solid rgba(68,153,255,0.25); }
+.news-sum { color: var(--text3); font-size: 10px; margin-top: 4px; line-height: 1.4; }
+
+/* ── ANALYST ROWS ── */
+.rat-row { display: flex; align-items: flex-start; gap: 6px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 11px; }
+.rat-row:last-child { border-bottom: none; }
+.rat-bank { color: var(--cyan); width: 110px; flex-shrink: 0; font-size: 10px; padding-top: 1px; }
+.rat-rating { padding: 1px 6px; border-radius: 2px; font-size: 9px; font-weight: bold; margin-right: 4px; white-space: nowrap; flex-shrink: 0; }
+.r-buy { background: rgba(0,204,136,0.15); color: var(--up); }
+.r-hold { background: rgba(255,204,0,0.12); color: var(--yellow); }
+.r-sell { background: rgba(255,68,85,0.15); color: var(--down); }
+.rat-tp { color: var(--text2); font-size: 10px; flex: 1; line-height: 1.4; }
+.rat-up { font-size: 10px; white-space: nowrap; flex-shrink: 0; }
+.rat-up.up { color: var(--up); }
+.rat-up.dn { color: var(--down); }
+
+/* ── CONSENSUS BAR ── */
+.consensus-bar { display: flex; height: 14px; border-radius: 2px; overflow: hidden; margin: 8px 0 4px; }
+.cb-buy { background: var(--up); }
+.cb-hold { background: var(--yellow); }
+.cb-sell { background: var(--down); }
+.cb-labels { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px; }
+
+/* ── Q-GRID (earnings table) ── */
+.q-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: var(--border); margin-top: 6px; font-size: 10px; }
+.q-cell { background: var(--bg2); padding: 5px 8px; text-align: right; }
+.q-cell.hdr { background: var(--bg3); color: var(--text2); text-align: left; font-size: 9px; }
+.q-cell.lbl { background: var(--bg0); color: var(--text2); text-align: left; }
+.q-cell.act { color: var(--yellow); }
+.q-cell.est { color: var(--blue); }
+.q-cell.beat { color: var(--up); }
+
+/* ── FUND FLOW ── */
+.flow-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 11px; }
+.flow-row:last-child { border-bottom: none; }
+.flow-who { color: var(--text2); width: 110px; flex-shrink: 0; font-size: 10px; }
+.flow-dir { font-size: 10px; font-weight: bold; width: 55px; flex-shrink: 0; }
+.flow-dir.in { color: var(--up); }
+.flow-dir.out { color: var(--down); }
+.flow-amt { color: var(--text); flex: 1; font-size: 10px; }
+.flow-bar-mini { height: 4px; border-radius: 2px; flex-shrink: 0; }
+.flow-bar-mini.in { background: rgba(0,204,136,0.5); }
+.flow-bar-mini.out { background: rgba(255,68,85,0.5); }
+
+/* ── VALUATION CARDS ── */
+.val-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+.val-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 3px; padding: 8px; text-align: center; }
+.val-method { color: var(--text3); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
+.val-price { font-size: 15px; font-weight: bold; margin: 4px 0; }
+.val-upside { font-size: 10px; }
+.val-upside.up { color: var(--up); }
+.val-upside.dn { color: var(--down); }
+
+/* ── RISK ── */
+.risk-item { padding: 5px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
+.risk-item:last-child { border-bottom: none; }
+.risk-label { font-size: 10px; font-weight: bold; width: 45px; flex-shrink: 0; padding-top: 1px; }
+.risk-label.bull { color: var(--up); }
+.risk-label.bear { color: var(--down); }
+.risk-text { color: var(--text2); font-size: 10px; line-height: 1.4; flex: 1; }
+
+/* ── SECTION LABEL ── */
+.section-lbl { color: var(--text3); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; padding: 6px 0 3px; }
+
+/* ── CHART ── */
+.chart-wrap { position: relative; width: 100%; height: 150px; margin-top: 6px; }
+
+/* ── LOADING / ERROR ── */
+.loading { color: var(--text3); font-size: 11px; padding: 8px 0; animation: blink 1s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+.error-msg { color: var(--down); font-size: 10px; padding: 4px 0; }
+.api-note { background: var(--bg3); border: 1px solid var(--border2); border-radius: 3px; padding: 10px 12px; margin-bottom: 10px; font-size: 11px; color: var(--text2); line-height: 1.6; }
+.api-note strong { color: var(--yellow); }
+.api-note code { background: var(--bg0); padding: 1px 5px; border-radius: 2px; color: var(--cyan); font-size: 10px; }
+
+/* ── CONFIG PANEL ── */
+.config-section { padding: 12px; }
+.config-group { background: var(--bg1); border: 1px solid var(--border); border-radius: 4px; padding: 12px; margin-bottom: 12px; }
+.config-group h3 { color: var(--orange); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
+.config-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.config-label { color: var(--text2); font-size: 11px; width: 160px; flex-shrink: 0; }
+.config-input { background: var(--bg0); border: 1px solid var(--border2); color: var(--text); font-family: inherit; font-size: 11px; padding: 5px 8px; border-radius: 3px; flex: 1; min-width: 200px; }
+.config-input:focus { outline: none; border-color: var(--orange); }
+.save-btn { background: var(--orange); color: #000; border: none; padding: 7px 18px; cursor: pointer; font-family: inherit; font-size: 11px; font-weight: bold; border-radius: 3px; }
+.save-btn:hover { background: #ff9500; }
+.status-ok { color: var(--up); font-size: 10px; }
+.status-err { color: var(--down); font-size: 10px; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+    <span class="logo">■ SK HYNIX TERMINAL</span>
+    <div class="ticker-hero">
+      <span class="ticker-sym">000660 KS</span>
+      <span class="ticker-price" id="price-display">—</span>
+      <span class="ticker-chg" id="chg-display">Loading...</span>
+    </div>
+    <span style="color:var(--text3);font-size:11px;">SK HYNIX INC · KRX · KRW</span>
+  </div>
+  <div class="topbar-right">
+    <span><span class="live-dot"></span><span id="market-status">FETCHING</span></span>
+    <span id="hk-time">—</span>
+    <span id="mktcap-display" style="color:var(--yellow)">—</span>
+    <button class="refresh-btn" onclick="refreshAll()">⟳ REFRESH</button>
+    <span class="last-updated" id="last-updated">—</span>
+  </div>
+</div>
+
+<!-- NAV -->
+<div class="nav">
+  <button class="nav-btn active" onclick="showSection('overview',this)">OVERVIEW</button>
+  <button class="nav-btn" onclick="showSection('financials',this)">FINANCIALS</button>
+  <button class="nav-btn" onclick="showSection('research',this)">RESEARCH</button>
+  <button class="nav-btn" onclick="showSection('fundflow',this)">FUND FLOW</button>
+  <button class="nav-btn" onclick="showSection('valuation',this)">VALUATION</button>
+  <button class="nav-btn" onclick="showSection('config',this)">⚙ CONFIG / API KEYS</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     OVERVIEW SECTION
+══════════════════════════════════════════════════════ -->
+<div id="section-overview" class="section active">
+<div class="panels">
+
+  <!-- Price Stats -->
+  <div class="panel">
+    <div class="panel-title">PRICE STATS <span id="price-source">KRX</span></div>
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kpi-label">LAST PRICE</div><div class="kpi-val" id="kpi-price">—</div><div class="kpi-sub" id="kpi-chg-pct">—</div></div>
+      <div class="kpi"><div class="kpi-label">52W RANGE</div><div class="kpi-val" style="font-size:11px;color:var(--text)" id="kpi-52w">—</div><div class="kpi-sub" id="kpi-52w-sub">—</div></div>
+      <div class="kpi"><div class="kpi-label">P/E RATIO</div><div class="kpi-val" id="kpi-pe">—</div><div class="kpi-sub" id="kpi-pe-fwd">Fwd ~5x</div></div>
+      <div class="kpi"><div class="kpi-label">VOLUME</div><div class="kpi-val" id="kpi-vol">—</div><div class="kpi-sub" id="kpi-avgvol">—</div></div>
+      <div class="kpi"><div class="kpi-label">MKT CAP</div><div class="kpi-val" id="kpi-mktcap">—</div><div class="kpi-sub">KRW trillion</div></div>
+      <div class="kpi"><div class="kpi-label">DIVIDEND</div><div class="kpi-val" id="kpi-div">0.18%</div><div class="kpi-sub">₩750 / qtr</div></div>
+    </div>
+    <div class="bar-row"><span class="bar-label">YTD Return</span><div class="bar-track"><div class="bar-fill" id="bar-ytd" style="width:0%;background:var(--up)"></div></div><span class="bar-val up" id="bar-ytd-val">—</span></div>
+    <div class="bar-row"><span class="bar-label">1Y Return</span><div class="bar-track"><div class="bar-fill" id="bar-1y" style="width:0%;background:var(--cyan)"></div></div><span class="bar-val" style="color:var(--cyan)" id="bar-1y-val">—</span></div>
+    <div class="bar-row"><span class="bar-label">HBM Mkt Share</span><div class="bar-track"><div class="bar-fill" style="width:57%;background:var(--orange)"></div></div><span class="bar-val" style="color:var(--orange)">57%</span></div>
+  </div>
+
+  <!-- Price Chart -->
+  <div class="panel wide">
+    <div class="panel-title">PRICE CHART <span id="chart-period">1Y — Loading...</span></div>
+    <div class="chart-wrap" style="height:160px;">
+      <canvas id="priceChart" role="img" aria-label="SK Hynix price chart">Loading chart data...</canvas>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:8px;font-size:10px;flex-wrap:wrap;" id="chart-legend">
+      <span style="color:var(--text3)">Loading price history...</span>
+    </div>
+  </div>
+
+  <!-- News -->
+  <div class="panel full">
+    <div class="panel-title">LATEST NEWS & PRICE IMPACT <span id="news-count">Loading...</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);" id="news-grid">
+      <div style="background:var(--bg1);padding:8px 10px;" id="news-col-1"><div class="loading">Fetching news...</div></div>
+      <div style="background:var(--bg1);padding:8px 10px;" id="news-col-2"></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     FINANCIALS SECTION
+══════════════════════════════════════════════════════ -->
+<div id="section-financials" class="section">
+<div class="panels">
+  <div class="panel full">
+    <div class="panel-title">QUARTERLY RESULTS & ESTIMATES <span>K-IFRS · ₩ TRILLION</span></div>
+    <div class="q-grid">
+      <div class="q-cell hdr">METRIC</div>
+      <div class="q-cell hdr" style="text-align:right">Q1'25A</div>
+      <div class="q-cell hdr" style="text-align:right">Q4'25A</div>
+      <div class="q-cell hdr" style="color:var(--yellow);text-align:right">Q1'26A ★</div>
+      <div class="q-cell hdr" style="color:var(--blue);text-align:right">Q2'26E</div>
+      <div class="q-cell lbl">Revenue (₩T)</div><div class="q-cell">17.64</div><div class="q-cell">32.83</div><div class="q-cell act">52.58</div><div class="q-cell est">76.24</div>
+      <div class="q-cell lbl">Revenue YoY</div><div class="q-cell" style="color:var(--up)">+144%</div><div class="q-cell" style="color:var(--up)">+186%</div><div class="q-cell beat">+198% ✓</div><div class="q-cell est">+320%E</div>
+      <div class="q-cell lbl">Oper. Profit (₩T)</div><div class="q-cell">7.44</div><div class="q-cell">19.17</div><div class="q-cell act">37.61</div><div class="q-cell est">~55E</div>
+      <div class="q-cell lbl">Op. Margin</div><div class="q-cell">42.2%</div><div class="q-cell">58.4%</div><div class="q-cell act">71.5%</div><div class="q-cell est">~72%E</div>
+      <div class="q-cell lbl">Net Profit (₩T)</div><div class="q-cell">6.07</div><div class="q-cell">15.25</div><div class="q-cell act">40.35</div><div class="q-cell est">~58E</div>
+      <div class="q-cell lbl">Net Margin</div><div class="q-cell">34.4%</div><div class="q-cell">46.4%</div><div class="q-cell act">77.0%</div><div class="q-cell est">~76%E</div>
+      <div class="q-cell lbl">EBITDA (₩T)</div><div class="q-cell">—</div><div class="q-cell">—</div><div class="q-cell act">41.34</div><div class="q-cell est">—</div>
+      <div class="q-cell lbl">EBITDA Margin</div><div class="q-cell">—</div><div class="q-cell">—</div><div class="q-cell act">78.6%</div><div class="q-cell est">—</div>
+      <div class="q-cell lbl">DRAM ASP QoQ</div><div class="q-cell">—</div><div class="q-cell">—</div><div class="q-cell act">+mid-60%</div><div class="q-cell est">—</div>
+      <div class="q-cell lbl">NAND ASP QoQ</div><div class="q-cell">—</div><div class="q-cell">—</div><div class="q-cell act">+mid-70%</div><div class="q-cell est">—</div>
+      <div class="q-cell lbl">Net Cash (₩T)</div><div class="q-cell">—</div><div class="q-cell">—</div><div class="q-cell act">35.0</div><div class="q-cell est">—</div>
+      <div class="q-cell lbl">Total Debt (₩T)</div><div class="q-cell">22.25</div><div class="q-cell">—</div><div class="q-cell beat">19.32 ↓</div><div class="q-cell est">—</div>
+    </div>
+    <div style="margin-top:10px;font-size:10px;color:var(--text3);display:flex;gap:16px;flex-wrap:wrap;">
+      <span style="color:var(--yellow)">★ Q1'26: ALL-TIME quarterly highs across all metrics</span>
+      <span>FY'25: Rev ₩97.15T (+47%) · OP ₩47.21T (+101%) · NP ₩42.95T (+117%)</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">ANNUAL FORECAST <span>CONSENSUS EST.</span></div>
+    <div class="fin-row"><span class="fin-label">FY2026E Revenue</span><span class="fin-val hi">₩200T+</span></div>
+    <div class="fin-row"><span class="fin-label">FY2026E Op. Profit</span><span class="fin-val hi">₩150–170T</span></div>
+    <div class="fin-row"><span class="fin-label">FY2026E EPS (KRW)</span><span class="fin-val hi" id="fin-eps">—</span></div>
+    <div class="fin-row"><span class="fin-label">FY2026E Fwd PER</span><span class="fin-val hi">~5x</span></div>
+    <div class="fin-row"><span class="fin-label">FY2027E Revenue</span><span class="fin-val" style="color:var(--blue)">₩300T+E</span></div>
+    <div class="fin-row"><span class="fin-label">FY2027E Fwd PER</span><span class="fin-val" style="color:var(--blue)">~3.5xE</span></div>
+    <div class="fin-row"><span class="fin-label">EV/EBITDA 2026E</span><span class="fin-val hi">~4x</span></div>
+    <div class="fin-row"><span class="fin-label">Q2'26E Revenue</span><span class="fin-val" style="color:var(--blue)">₩76.24T</span></div>
+    <div class="fin-row"><span class="fin-label">Q2'26E EPS (KRW)</span><span class="fin-val" style="color:var(--blue)">64,435</span></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">BALANCE SHEET <span>Q1 2026</span></div>
+    <div class="fin-row"><span class="fin-label">Cash & Equivalents</span><span class="fin-val hi">₩54.3T</span></div>
+    <div class="fin-row"><span class="fin-label">Net Cash Position</span><span class="fin-val up">₩35.0T</span></div>
+    <div class="fin-row"><span class="fin-label">Total Debt</span><span class="fin-val">₩19.3T</span></div>
+    <div class="fin-row"><span class="fin-label">Target Net Cash</span><span class="fin-val" style="color:var(--yellow)">₩100T (CEO target)</span></div>
+    <div class="fin-row"><span class="fin-label">2025 Dividends Paid</span><span class="fin-val">₩2.1T</span></div>
+    <div class="fin-row"><span class="fin-label">2025 Shares Cancelled</span><span class="fin-val up">₩12.2T</span></div>
+    <div class="fin-row"><span class="fin-label">CAPEX Plan (new fab)</span><span class="fin-val">₩19T (Cheongju)</span></div>
+    <div class="fin-row"><span class="fin-label">Indiana Pkg Facility</span><span class="fin-val">$15B (in progress)</span></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">MARKET SHARE <span>2026</span></div>
+    <div style="margin-bottom:8px;">
+      <div class="bar-row"><span class="bar-label">HBM Global</span><div class="bar-track"><div class="bar-fill" style="width:57%;background:var(--orange)"></div></div><span class="bar-val" style="color:var(--orange)">57%</span></div>
+      <div class="bar-row"><span class="bar-label">DRAM Global</span><div class="bar-track"><div class="bar-fill" style="width:33%;background:var(--cyan)"></div></div><span class="bar-val" style="color:var(--cyan)">33%</span></div>
+      <div class="bar-row"><span class="bar-label">NAND Global</span><div class="bar-track"><div class="bar-fill" style="width:21%;background:var(--purple)"></div></div><span class="bar-val" style="color:var(--purple)">21%</span></div>
+    </div>
+    <div class="fin-row"><span class="fin-label">Revenue Mix DRAM</span><span class="fin-val">~65%</span></div>
+    <div class="fin-row"><span class="fin-label">Revenue Mix NAND</span><span class="fin-val">~32%</span></div>
+    <div class="fin-row"><span class="fin-label">Key Customers</span><span class="fin-val">Nvidia, MSFT, Apple, HPE</span></div>
+    <div class="fin-row"><span class="fin-label">Employees</span><span class="fin-val">34,550</span></div>
+    <div class="fin-row"><span class="fin-label">Largest Shareholder</span><span class="fin-val">SK Square 20%</span></div>
+  </div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     RESEARCH SECTION
+══════════════════════════════════════════════════════ -->
+<div id="section-research" class="section">
+<div class="panels">
+
+  <div class="panel full">
+    <div class="panel-title">GLOBAL IB RESEARCH — TOP 10 <span>CONSENSUS: STRONG BUY · 38 ANALYSTS</span></div>
+    <div class="cb-labels">
+      <span style="color:var(--up)">BUY 35 (92%)</span>
+      <span style="color:var(--yellow)">HOLD 3 (8%)</span>
+      <span style="color:var(--down)">SELL 0</span>
+    </div>
+    <div class="consensus-bar"><div class="cb-buy" style="width:92%"></div><div class="cb-hold" style="width:8%"></div></div>
+    <div class="rat-row" style="font-size:9px;color:var(--text3);padding:2px 0 5px;border-bottom:1px solid var(--border2);">
+      <span class="rat-bank">BANK</span><span style="width:55px;font-size:9px;">RATING</span><span style="flex:1">12M TARGET · THESIS</span><span style="width:65px;text-align:right">UPSIDE</span>
+    </div>
+    <div class="rat-row"><span class="rat-bank">Morgan Stanley</span><span class="rat-rating r-buy">OVERWEIGHT</span><span class="rat-tp">₩1,900,000 | HBM pricing tightens thru 2026; 5.3x 2026E; DRAM +62%/NAND +75%; China H200 demand ~$3B incremental</span><span class="rat-up up">+15%</span></div>
+    <div class="rat-row"><span class="rat-bank">Goldman Sachs</span><span class="rat-rating r-buy">BUY</span><span class="rat-tp">₩2,000,000 | HBM4 roadmap execution on track; AI infra spending $700B in 2026; supply-demand imbalance to 2027+</span><span class="rat-up up">+21%</span></div>
+    <div class="rat-row"><span class="rat-bank">JPMorgan</span><span class="rat-rating r-buy">OVERWEIGHT</span><span class="rat-tp">₩2,100,000 | Memory supercycle; Nvidia HBM4 exclusivity; wafer shortage to 2030; ADR listing = valuation re-rating</span><span class="rat-up up">+27%</span></div>
+    <div class="rat-row"><span class="rat-bank">UBS</span><span class="rat-rating r-buy">BUY</span><span class="rat-tp">₩1,900,000 | Structural AI inference demand; HBM share >57%; Q2'26 rev ₩76T; agentic AI = new memory layer</span><span class="rat-up up">+15%</span></div>
+    <div class="rat-row"><span class="rat-bank">Citi</span><span class="rat-rating r-buy">BUY</span><span class="rat-tp">₩2,200,000 | 72% op margin beat; FY2026 annualised ₩200T+ rev; net cash ₩35T platform for shareholder returns</span><span class="rat-up up">+33%</span></div>
+    <div class="rat-row"><span class="rat-bank">Deutsche Bank</span><span class="rat-rating r-buy">BUY</span><span class="rat-tp">₩1,850,000 | HBM3E/HBM4 margin premium sustained; Samsung 9-12 mths behind; supply-constrained pricing power</span><span class="rat-up up">+12%</span></div>
+    <div class="rat-row"><span class="rat-bank">HSBC</span><span class="rat-rating r-buy">BUY</span><span class="rat-tp">₩2,000,000 | Memory as AI infrastructure; hyperscaler CapEx locked in; Vera Rubin platform demand wave incoming</span><span class="rat-up up">+21%</span></div>
+    <div class="rat-row"><span class="rat-bank">Nomura</span><span class="rat-rating r-buy">BUY</span><span class="rat-tp">₩1,950,000 | HBM4E samples H2'26; mass prod 2027; strong FCF; shareholder return visibility improving</span><span class="rat-up up">+18%</span></div>
+    <div class="rat-row"><span class="rat-bank">BofA</span><span class="rat-rating r-buy">BUY</span><span class="rat-tp">₩2,500,000 | Bull case: HBM4E monopoly pricing; SOX inclusion post-ADR = structural $10-15B inflow</span><span class="rat-up up">+51%</span></div>
+    <div class="rat-row"><span class="rat-bank">Macquarie</span><span class="rat-rating r-hold">HOLD</span><span class="rat-tp">₩1,550,000 | Rich after +88% YTD; China competition risk; Samsung HBM4 catch-up may pressure margins 2027</span><span class="rat-up dn">-6%</span></div>
+    <div style="margin-top:8px;font-size:10px;color:var(--text3);">
+      Avg consensus TP: <span style="color:var(--yellow)">₩1,772,000</span> ·
+      High: <span style="color:var(--up)">₩2,500,000</span> ·
+      Low: <span style="color:var(--down)">₩1,030,000</span> ·
+      Morningstar FV: <span style="color:var(--yellow)">₩2,700,000</span>
+    </div>
+  </div>
+
+  <div class="panel full">
+    <div class="panel-title">KOREAN SECURITIES RESEARCH <span>DOMESTIC BROKERAGES</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);">
+      <div style="background:var(--bg1);padding:8px 10px;">
+        <div class="rat-row"><span class="rat-bank">SK Securities</span><span class="rat-rating r-buy">BUY</span><span class="rat-tp">₩3,000,000 — Highest TP. 10x PER framework: HBM = infrastructure not commodity. FY26 OP ₩262T, FY27 ₩376T.</span><span class="rat-up up">+81%</span></div>
+        <div class="rat-row"><span class="rat-bank">Daol I&S</span><span class="rat-rating r-buy">BUY</span><span class="rat-tp">₩2,100,000 — Raised from ₩1.6M post Q1. Q1 margin beat = structural not one-off. Domestic high at revision.</span><span class="rat-up up">+27%</span></div>
+        <div class="rat-row"><span class="rat-bank">Mirae Asset</span><span class="rat-rating r-buy">BUY</span><span class="rat-tp">₩2,000,000 — HBM4 ramp into Vera Rubin; ADR = global index inclusion catalyst; domestic underweight.</span><span class="rat-up up">+21%</span></div>
+      </div>
+      <div style="background:var(--bg1);padding:8px 10px;">
+        <div class="rat-row"><span class="rat-bank">KB Securities</span><span class="rat-rating r-buy">BUY</span><span class="rat-tp">₩1,900,000 — DRAM market share defense vs Samsung; Morningstar FV ₩2.7M still implies deep discount.</span><span class="rat-up up">+15%</span></div>
+        <div class="rat-row"><span class="rat-bank">Kiwoom</span><span class="rat-rating r-buy">BUY</span><span class="rat-tp">₩2,050,000 — Net cash ₩35T + ₩100T target = special dividend / buyback potential; strong retail sentiment.</span><span class="rat-up up">+24%</span></div>
+        <div class="rat-row"><span class="rat-bank">Samsung Sec.</span><span class="rat-rating r-hold">HOLD</span><span class="rat-tp">₩1,700,000 — Cautious: Q1 revenue slightly missed; Samsung HBM4 cert progress; trimmed guidance for retail.</span><span class="rat-up up">+3%</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     FUND FLOW SECTION
+══════════════════════════════════════════════════════ -->
+<div id="section-fundflow" class="section">
+<div class="panels">
+  <div class="panel wide">
+    <div class="panel-title">FUND FLOW MONITOR <span>INVESTOR TYPE BREAKDOWN</span></div>
+    <div class="section-lbl">FOREIGN INSTITUTIONAL</div>
+    <div class="flow-row"><span class="flow-who">Foreign Funds</span><span class="flow-dir in">NET BUY</span><span class="flow-amt">+₩2.1T (May 5–7, 2026)</span><div class="flow-bar-mini in" style="width:55px"></div></div>
+    <div class="flow-row"><span class="flow-who">Altimeter Capital</span><span class="flow-dir in">ADDED</span><span class="flow-amt">Large block position (exited MSFT; rotated into AI hardware)</span><div class="flow-bar-mini in" style="width:45px"></div></div>
+    <div class="flow-row"><span class="flow-who">GDR Holders</span><span class="flow-dir in">ACCUMULATE</span><span class="flow-amt">ADR listing premium signaling institutional pre-positioning</span><div class="flow-bar-mini in" style="width:35px"></div></div>
+    <div class="flow-row"><span class="flow-who">US Long-Only</span><span class="flow-dir in">NET BUY</span><span class="flow-amt">Increasing ahead of expected ADR / SOX inclusion</span><div class="flow-bar-mini in" style="width:40px"></div></div>
+    <div class="section-lbl" style="margin-top:8px;">DOMESTIC INSTITUTIONAL</div>
+    <div class="flow-row"><span class="flow-who">NPS Korea</span><span class="flow-dir in">HOLD +</span><span class="flow-amt">Top-5 domestic holding; gradual accumulation on dips</span><div class="flow-bar-mini in" style="width:30px"></div></div>
+    <div class="flow-row"><span class="flow-who">Domestic Funds</span><span class="flow-dir in">NET BUY</span><span class="flow-amt">+₩380B weekly avg; price target upgrades driving mandates</span><div class="flow-bar-mini in" style="width:28px"></div></div>
+    <div class="section-lbl" style="margin-top:8px;">RETAIL / PROPRIETARY</div>
+    <div class="flow-row"><span class="flow-who">Retail Korea</span><span class="flow-dir out">NET SELL</span><span class="flow-amt">-₩420B profit-taking after +145% YTD run</span><div class="flow-bar-mini out" style="width:30px"></div></div>
+    <div class="flow-row"><span class="flow-who">Prop Desks</span><span class="flow-dir in">NET BUY</span><span class="flow-amt">Momentum following; ATH breakout strategy</span><div class="flow-bar-mini in" style="width:22px"></div></div>
+    <div style="margin-top:10px;padding:8px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;">
+      <div style="color:var(--up);font-size:11px;font-weight:bold;margin-bottom:4px;">NET FOREIGN FLOW: STRONGLY POSITIVE</div>
+      <div style="color:var(--text3);font-size:10px;line-height:1.6;">Foreign ownership ~53% of float. Short interest ~0.8% — minimal. ADR filing catalyzing structural global inflows. Expected SOX ETF passive inflow $5–15B upon inclusion.</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">OWNERSHIP STRUCTURE</div>
+    <div class="fin-row"><span class="fin-label">SK Square (parent)</span><span class="fin-val hi">20.1%</span></div>
+    <div class="fin-row"><span class="fin-label">Foreign Investors</span><span class="fin-val">~53%</span></div>
+    <div class="fin-row"><span class="fin-label">Domestic Institutional</span><span class="fin-val">~18%</span></div>
+    <div class="fin-row"><span class="fin-label">Retail Korea</span><span class="fin-val">~9%</span></div>
+    <div class="fin-row"><span class="fin-label">Short Interest</span><span class="fin-val up">~0.8% (low)</span></div>
+    <div class="fin-row"><span class="fin-label">Free Float</span><span class="fin-val">~79.9%</span></div>
+    <div class="fin-row" style="margin-top:8px;"><span class="fin-label">2025 Buyback+Cancel</span><span class="fin-val up">₩12.2T</span></div>
+    <div class="fin-row"><span class="fin-label">2025 Dividends</span><span class="fin-val">₩2.1T</span></div>
+    <div class="fin-row"><span class="fin-label">ADR Filing Status</span><span class="fin-val" style="color:var(--yellow)">Confidential (Mar'26)</span></div>
+    <div class="fin-row"><span class="fin-label">Expected ADR Amount</span><span class="fin-val">$6.7–10B</span></div>
+  </div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     VALUATION SECTION
+══════════════════════════════════════════════════════ -->
+<div id="section-valuation" class="section">
+<div class="panels">
+
+  <div class="panel full">
+    <div class="panel-title">12-MONTH FORWARD VALUATION — BULL / BASE / BEAR <span id="val-current-price">Current: Loading...</span></div>
+    <div class="val-grid">
+      <div class="val-card" style="border-color:var(--up)">
+        <div class="val-method">BULL CASE</div>
+        <div class="val-price" style="color:var(--up)">₩3,000,000</div>
+        <div class="val-upside up" id="val-bull-up">—</div>
+        <div style="color:var(--text3);font-size:9px;margin-top:6px;line-height:1.5;">10x PER on FY26E · HBM re-rating to infrastructure multiple · ADR + SOX ETF inclusion · SK Securities TP · Wafer shortage to 2030</div>
+      </div>
+      <div class="val-card" style="border-color:var(--yellow)">
+        <div class="val-method">BASE CASE</div>
+        <div class="val-price" style="color:var(--yellow)">₩2,000,000</div>
+        <div class="val-upside up" id="val-base-up">—</div>
+        <div style="color:var(--text3);font-size:9px;margin-top:6px;line-height:1.5;">6-7x PER on FY26E · Supply stays tight thru 2027 · HBM4 ramp on schedule · Consensus analyst range · ADR neutral</div>
+      </div>
+      <div class="val-card" style="border-color:var(--down)">
+        <div class="val-method">BEAR CASE</div>
+        <div class="val-price" style="color:var(--down)">₩1,150,000</div>
+        <div class="val-upside dn" id="val-bear-up">—</div>
+        <div style="color:var(--text3);font-size:9px;margin-top:6px;line-height:1.5;">Samsung/Micron HBM catch-up · China oversupply 2027 · Memory cycle turns · ADR $8B dilution · Trade tariff risk</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">VALUATION METRICS</div>
+    <div class="fin-row"><span class="fin-label">Current Price</span><span class="fin-val" style="color:var(--cyan)" id="val-cur">—</span></div>
+    <div class="fin-row"><span class="fin-label">Morningstar FV</span><span class="fin-val hi">₩2,700,000</span></div>
+    <div class="fin-row"><span class="fin-label">Consensus Avg TP</span><span class="fin-val hi">₩1,772,000</span></div>
+    <div class="fin-row"><span class="fin-label">High TP (BofA)</span><span class="fin-val up">₩2,500,000</span></div>
+    <div class="fin-row"><span class="fin-label">Low TP (Macquarie)</span><span class="fin-val dn">₩1,030,000</span></div>
+    <div class="fin-row"><span class="fin-label">Upside to Avg TP</span><span class="fin-val up" id="val-upside-avg">—</span></div>
+    <div class="fin-row"><span class="fin-label">Trailing P/E</span><span class="fin-val" id="val-pe">—</span></div>
+    <div class="fin-row"><span class="fin-label">Fwd P/E 2026E</span><span class="fin-val hi">~5x</span></div>
+    <div class="fin-row"><span class="fin-label">Fwd P/E 2027E</span><span class="fin-val hi">~3.5x</span></div>
+    <div class="fin-row"><span class="fin-label">EV/EBITDA 2026E</span><span class="fin-val hi">~4x</span></div>
+    <div class="fin-row"><span class="fin-label">P/B Ratio</span><span class="fin-val" id="val-pb">—</span></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">KEY RISKS & CATALYSTS</div>
+    <div style="color:var(--up);font-size:10px;font-weight:bold;margin-bottom:4px;">▲ BULL CATALYSTS</div>
+    <div class="risk-item"><span class="risk-label bull">▲ BULL</span><span class="risk-text">Nvidia Vera Rubin HBM4E orders confirmed; samples H2'26; mass prod 2027 — next demand wave locked in</span></div>
+    <div class="risk-item"><span class="risk-label bull">▲ BULL</span><span class="risk-text">ADR NYSE listing 2026 → SOX ETF inclusion → structural $5–15B passive global inflow estimated</span></div>
+    <div class="risk-item"><span class="risk-label bull">▲ BULL</span><span class="risk-text">Agentic AI inference = 10x more memory per cycle vs training; new structural permanent demand layer</span></div>
+    <div class="risk-item"><span class="risk-label bull">▲ BULL</span><span class="risk-text">Chip wafer shortage persists to 2030 (SK Group Chairman); 4–5 years to expand capacity → pricing power</span></div>
+    <div style="color:var(--down);font-size:10px;font-weight:bold;margin:8px 0 4px;">▼ BEAR RISKS</div>
+    <div class="risk-item"><span class="risk-label bear">▼ RISK</span><span class="risk-text">Samsung HBM4 first shipment Feb'26; AMD supply MOU signed — competitive threat to SK's HBM premium</span></div>
+    <div class="risk-item"><span class="risk-label bear">▼ RISK</span><span class="risk-text">China memory (CXMT DRAM, YMTC NAND) capacity ramp → commodity memory price erosion from 2027</span></div>
+    <div class="risk-item"><span class="risk-label bear">▼ RISK</span><span class="risk-text">ADR $8B issuance = ~3–5% dilution; near-term overhang for existing shareholders</span></div>
+    <div class="risk-item"><span class="risk-label bear">▼ RISK</span><span class="risk-text">US-Korea trade policy / tariffs; Korean Won FX risk for USD-based investors</span></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">PEER COMPARISON <span>MEMORY SECTOR</span></div>
+    <div class="fin-row"><span class="fin-label">SK Hynix P/E (fwd)</span><span class="fin-val hi">~5x</span></div>
+    <div class="fin-row"><span class="fin-label">Micron P/E (fwd)</span><span class="fin-val">~8–10x</span></div>
+    <div class="fin-row"><span class="fin-label">Samsung P/E (fwd)</span><span class="fin-val">~12x</span></div>
+    <div class="fin-row"><span class="fin-label">SK Hynix Op Margin</span><span class="fin-val up">72% (Q1'26)</span></div>
+    <div class="fin-row"><span class="fin-label">Micron Op Margin</span><span class="fin-val">~38%</span></div>
+    <div class="fin-row"><span class="fin-label">HBM Share: SK Hynix</span><span class="fin-val up">57%</span></div>
+    <div class="fin-row"><span class="fin-label">HBM Share: Samsung</span><span class="fin-val">~30%</span></div>
+    <div class="fin-row"><span class="fin-label">HBM Share: Micron</span><span class="fin-val">~13%</span></div>
+    <div style="margin-top:8px;font-size:10px;color:var(--text3);">SK Hynix trades at discount to Micron on fwd P/E despite higher margins and HBM dominance — valuation gap = ADR re-rating opportunity</div>
+  </div>
+
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     CONFIG SECTION
+══════════════════════════════════════════════════════ -->
+<div id="section-config" class="section">
+<div class="config-section">
+
+  <div class="api-note">
+    <strong>How live data works in this terminal</strong><br><br>
+    This terminal fetches real market data using free/freemium APIs. Configure your API keys below — they are saved in your browser's <code>localStorage</code> and never leave your device.<br><br>
+    <strong>Recommended setup (free):</strong><br>
+    1. <strong>Yahoo Finance (via AllOrigins proxy)</strong> — No key needed. Stock price, P/E, 52W range, volume, market cap. Works out of the box.<br>
+    2. <strong>Finnhub</strong> — Free tier at <a href="https://finnhub.io" target="_blank">finnhub.io</a>. News feed with headlines.<br>
+    3. <strong>Alpha Vantage</strong> — Free tier at <a href="https://www.alphavantage.co" target="_blank">alphavantage.co</a>. Historical prices for chart.<br><br>
+    <strong>Auto-refresh:</strong> Enable the 7:00 AM HKT daily refresh below. The page must be open in your browser at that time (or use a browser extension like Tab Auto Refresh).
+  </div>
+
+  <div class="config-group">
+    <h3>API Keys</h3>
+    <div class="config-row">
+      <span class="config-label">Finnhub API Key</span>
+      <input class="config-input" id="cfg-finnhub" type="text" placeholder="Enter Finnhub API key (free at finnhub.io)">
+    </div>
+    <div class="config-row">
+      <span class="config-label">Alpha Vantage Key</span>
+      <input class="config-input" id="cfg-alphavantage" type="text" placeholder="Enter Alpha Vantage key (free at alphavantage.co)">
+    </div>
+    <div class="config-row">
+      <button class="save-btn" onclick="saveConfig()">SAVE KEYS</button>
+      <span id="cfg-status"></span>
+    </div>
+  </div>
+
+  <div class="config-group">
+    <h3>Auto-Refresh Settings</h3>
+    <div class="config-row">
+      <span class="config-label">Auto-refresh on page load</span>
+      <select class="config-input" id="cfg-autorefresh" style="max-width:200px;">
+        <option value="1">Yes — refresh on every load</option>
+        <option value="0">No — manual refresh only</option>
+      </select>
+    </div>
+    <div class="config-row">
+      <span class="config-label">Refresh interval (while open)</span>
+      <select class="config-input" id="cfg-interval" style="max-width:200px;">
+        <option value="0">Manual only</option>
+        <option value="300">Every 5 minutes</option>
+        <option value="900">Every 15 minutes</option>
+        <option value="1800">Every 30 minutes</option>
+        <option value="3600">Every 1 hour</option>
+      </select>
+    </div>
+    <div class="config-row">
+      <button class="save-btn" onclick="saveConfig()">SAVE SETTINGS</button>
+    </div>
+  </div>
+
+  <div class="config-group">
+    <h3>7:00 AM HKT Daily Refresh</h3>
+    <div style="color:var(--text2);font-size:11px;line-height:1.7;">
+      To get automatic 7am HKT data every day:<br>
+      <strong style="color:var(--yellow)">Option A (Easiest):</strong> Install the browser extension <strong>Tab Auto Refresh</strong> (Chrome/Firefox). Set it to refresh this HTML file daily at 07:00 HKT.<br>
+      <strong style="color:var(--yellow)">Option B (Local server):</strong> Run a simple Python server: <code>python3 -m http.server 8080</code> in the same folder, then open <code>localhost:8080/sk_hynix_terminal.html</code>. Use a cron job: <code>0 7 * * * open http://localhost:8080/sk_hynix_terminal.html</code><br>
+      <strong style="color:var(--yellow)">Option C (Windows Task Scheduler):</strong> Create a task that opens this HTML file in your browser at 07:00 daily.<br><br>
+      <span style="color:var(--text3)">HKT = UTC+8. Current HKT shown in top bar.</span>
+    </div>
+  </div>
+
+  <div class="config-group">
+    <h3>Data Sources</h3>
+    <div style="color:var(--text2);font-size:11px;line-height:1.8;">
+      <span style="color:var(--up)">●</span> <strong>Stock Price / Stats:</strong> Yahoo Finance (via allorigins.win CORS proxy) — ticker <code>000660.KS</code><br>
+      <span style="color:var(--up)">●</span> <strong>News Headlines:</strong> Finnhub (<code>company-news</code> endpoint for <code>HXSCL</code>)<br>
+      <span style="color:var(--up)">●</span> <strong>Price History Chart:</strong> Alpha Vantage (<code>TIME_SERIES_DAILY</code>) or Yahoo Finance<br>
+      <span style="color:var(--yellow)">●</span> <strong>Analyst Research:</strong> Static — updated manually (requires Bloomberg/Refinitiv subscription for live data)<br>
+      <span style="color:var(--yellow)">●</span> <strong>Financials / Fund Flow:</strong> Static from Q1'26 earnings report — updated each quarter<br>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CONFIG & STATE
+// ═══════════════════════════════════════════════════
+const TICKER_YF = '000660.KS';
+const TICKER_FINNHUB = 'HXSCL'; // SK Hynix OTC / ADR symbol on Finnhub
+
+let priceChartInstance = null;
+let refreshTimer = null;
+
+function getCfg(key, fallback='') {
+  return localStorage.getItem('skhynix_'+key) || fallback;
+}
+function setCfg(key, val) {
+  localStorage.setItem('skhynix_'+key, val);
+}
+
+function saveConfig() {
+  setCfg('finnhub', document.getElementById('cfg-finnhub').value.trim());
+  setCfg('alphavantage', document.getElementById('cfg-alphavantage').value.trim());
+  setCfg('autorefresh', document.getElementById('cfg-autorefresh').value);
+  setCfg('interval', document.getElementById('cfg-interval').value);
+  document.getElementById('cfg-status').textContent = '✓ Saved';
+  document.getElementById('cfg-status').className = 'status-ok';
+  setupAutoRefresh();
+  setTimeout(() => { document.getElementById('cfg-status').textContent = ''; }, 3000);
+}
+
+function loadConfigUI() {
+  document.getElementById('cfg-finnhub').value = getCfg('finnhub');
+  document.getElementById('cfg-alphavantage').value = getCfg('alphavantage');
+  document.getElementById('cfg-autorefresh').value = getCfg('autorefresh','1');
+  document.getElementById('cfg-interval').value = getCfg('interval','900');
+}
+
+// ═══════════════════════════════════════════════════
+// HK TIME CLOCK
+// ═══════════════════════════════════════════════════
+function updateClock() {
+  const now = new Date();
+  const hkt = new Date(now.toLocaleString('en-US', {timeZone:'Asia/Hong_Kong'}));
+  const pad = n => String(n).padStart(2,'0');
+  const timeStr = `HKT ${pad(hkt.getHours())}:${pad(hkt.getMinutes())}:${pad(hkt.getSeconds())}`;
+  const dateStr = hkt.toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric',timeZone:'Asia/Hong_Kong'}).toUpperCase();
+  document.getElementById('hk-time').textContent = timeStr;
+  const topbarRight = document.querySelector('.topbar-right');
+  let dateEl = document.getElementById('hk-date');
+  if (!dateEl) {
+    dateEl = document.createElement('span');
+    dateEl.id = 'hk-date';
+    dateEl.style.color = 'var(--yellow)';
+    topbarRight.insertBefore(dateEl, document.getElementById('mktcap-display'));
+  }
+  dateEl.textContent = dateStr;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ═══════════════════════════════════════════════════
+// SECTION NAV
+// ═══════════════════════════════════════════════════
+function showSection(id, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('section-'+id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════
+// YAHOO FINANCE FETCH (via allorigins CORS proxy)
+// ═══════════════════════════════════════════════════
+async function fetchYahooQuote() {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${TICKER_YF}?interval=1d&range=1d`;
+    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const res = await fetch(proxy, {signal: AbortSignal.timeout(10000)});
+    const json = await res.json();
+    const data = JSON.parse(json.contents);
+    const q = data.chart.result[0];
+    const meta = q.meta;
+    return {
+      price: meta.regularMarketPrice,
+      prevClose: meta.chartPreviousClose || meta.previousClose,
+      high52: meta.fiftyTwoWeekHigh,
+      low52: meta.fiftyTwoWeekLow,
+      mktcap: meta.marketCap,
+      vol: meta.regularMarketVolume,
+      pe: meta.trailingPE,
+      pb: meta.priceToBook,
+      eps: meta.epsTrailingTwelveMonths,
+      currency: meta.currency,
+    };
+  } catch(e) {
+    console.warn('Yahoo quote failed:', e);
+    return null;
+  }
+}
+
+async function fetchYahooHistory() {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${TICKER_YF}?interval=1wk&range=1y`;
+    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const res = await fetch(proxy, {signal: AbortSignal.timeout(15000)});
+    const json = await res.json();
+    const data = JSON.parse(json.contents);
+    const q = data.chart.result[0];
+    const timestamps = q.timestamp;
+    const closes = q.indicators.quote[0].close;
+    return timestamps.map((t,i) => ({
+      date: new Date(t*1000).toLocaleDateString('en-GB',{month:'short',year:'2-digit'}),
+      price: closes[i]
+    })).filter(d => d.price);
+  } catch(e) {
+    console.warn('Yahoo history failed:', e);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// FINNHUB NEWS
+// ═══════════════════════════════════════════════════
+async function fetchFinnhubNews() {
+  const key = getCfg('finnhub');
+  if (!key) return null;
+  try {
+    const today = new Date();
+    const from = new Date(today - 7*24*60*60*1000).toISOString().split('T')[0];
+    const to = today.toISOString().split('T')[0];
+    const url = `https://finnhub.io/api/v1/company-news?symbol=${TICKER_FINNHUB}&from=${from}&to=${to}&token=${key}`;
+    const res = await fetch(url, {signal: AbortSignal.timeout(10000)});
+    const data = await res.json();
+    return Array.isArray(data) ? data.slice(0,8) : null;
+  } catch(e) {
+    console.warn('Finnhub news failed:', e);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// ALPHA VANTAGE HISTORY
+// ═══════════════════════════════════════════════════
+async function fetchAVHistory() {
+  const key = getCfg('alphavantage');
+  if (!key) return null;
+  try {
+    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY_ADJUSTED&symbol=${TICKER_YF}&apikey=${key}`;
+    const res = await fetch(url, {signal: AbortSignal.timeout(15000)});
+    const data = await res.json();
+    const series = data['Weekly Adjusted Time Series'];
+    if (!series) return null;
+    return Object.entries(series).slice(0,52).reverse().map(([date, v]) => ({
+      date: new Date(date).toLocaleDateString('en-GB',{month:'short',year:'2-digit'}),
+      price: parseFloat(v['5. adjusted close'])
+    }));
+  } catch(e) {
+    console.warn('AV history failed:', e);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════
+function fmt(n, digits=0) {
+  if (n == null || isNaN(n)) return '—';
+  return n.toLocaleString('en-US', {maximumFractionDigits: digits});
+}
+function fmtKRW(n) {
+  if (!n) return '—';
+  return '₩' + fmt(Math.round(n));
+}
+function fmtT(n) { // trillions
+  if (!n) return '—';
+  return '₩' + (n/1e12).toFixed(2) + 'T';
+}
+function pct(val, ref) {
+  if (!val || !ref) return null;
+  return ((val - ref) / ref * 100);
+}
+function colorClass(n) { return n >= 0 ? 'up' : 'dn'; }
+
+// ═══════════════════════════════════════════════════
+// UPDATE UI — QUOTE
+// ═══════════════════════════════════════════════════
+function updateQuoteUI(q) {
+  if (!q) {
+    document.getElementById('price-display').textContent = 'Data unavailable';
+    document.getElementById('chg-display').textContent = '(check config)';
+    document.getElementById('market-status').textContent = 'NO DATA';
+    return;
+  }
+  const chg = q.price - q.prevClose;
+  const chgPct = pct(q.price, q.prevClose);
+  const sign = chg >= 0 ? '+' : '';
+  const cls = chg >= 0 ? 'up' : 'dn';
+
+  // Top bar
+  document.getElementById('price-display').textContent = fmtKRW(q.price);
+  const chgEl = document.getElementById('chg-display');
+  chgEl.textContent = `${sign}${fmt(chg)} (${sign}${chgPct?.toFixed(2)}%)`;
+  chgEl.className = 'ticker-chg ' + cls;
+  document.getElementById('market-status').textContent = 'LIVE';
+  if (q.mktcap) document.getElementById('mktcap-display').textContent = 'MKTCAP ' + fmtT(q.mktcap);
+
+  // KPI cards
+  document.getElementById('kpi-price').textContent = fmtKRW(q.price);
+  document.getElementById('kpi-price').className = 'kpi-val';
+  document.getElementById('kpi-chg-pct').textContent = `${sign}${chgPct?.toFixed(2)}% today`;
+
+  if (q.high52 && q.low52) {
+    document.getElementById('kpi-52w').textContent = `${fmtKRW(q.low52)} – ${fmtKRW(q.high52)}`;
+    // Check if current is ATH
+    if (Math.abs(q.price - q.high52) / q.high52 < 0.01) {
+      document.getElementById('kpi-52w-sub').textContent = '★ AT/NEAR 52W HIGH';
+      document.getElementById('kpi-52w-sub').style.color = 'var(--up)';
+    }
+  }
+  if (q.pe) {
+    document.getElementById('kpi-pe').textContent = q.pe.toFixed(1) + 'x';
+  }
+  if (q.vol) {
+    document.getElementById('kpi-vol').textContent = (q.vol/1e6).toFixed(2) + 'M';
+    document.getElementById('kpi-avgvol').textContent = 'Avg ~4.32M';
+  }
+  if (q.mktcap) {
+    document.getElementById('kpi-mktcap').textContent = (q.mktcap/1e12).toFixed(1) + 'T';
+  }
+  if (q.eps) {
+    document.getElementById('fin-eps').textContent = fmt(q.eps);
+  }
+  if (q.pe) {
+    document.getElementById('val-pe').textContent = q.pe.toFixed(1) + 'x';
+    document.getElementById('val-pb') && (document.getElementById('val-pb').textContent = q.pb ? q.pb.toFixed(2)+'x' : '—');
+  }
+
+  // Valuation upside calcs
+  const curP = q.price;
+  document.getElementById('val-cur').textContent = fmtKRW(curP);
+  document.getElementById('val-current-price').textContent = 'Current: ' + fmtKRW(curP);
+  document.getElementById('val-bull-up').textContent = pct(3000000, curP)?.toFixed(1) + '% upside';
+  document.getElementById('val-bull-up').className = 'val-upside up';
+  const baseUp = pct(2000000, curP);
+  document.getElementById('val-base-up').textContent = (baseUp >= 0 ? '+' : '') + baseUp?.toFixed(1) + '% ' + (baseUp >= 0 ? 'upside' : 'downside');
+  document.getElementById('val-base-up').className = 'val-upside ' + (baseUp >= 0 ? 'up' : 'dn');
+  const bearUp = pct(1150000, curP);
+  document.getElementById('val-bear-up').textContent = bearUp?.toFixed(1) + '% downside';
+  document.getElementById('val-bear-up').className = 'val-upside dn';
+  const avgUp = pct(1772000, curP);
+  document.getElementById('val-upside-avg').textContent = (avgUp >= 0 ? '+' : '') + avgUp?.toFixed(1) + '%';
+  document.getElementById('val-upside-avg').className = 'fin-val ' + (avgUp >= 0 ? 'up' : 'dn');
+
+  // YTD bar (approx start 2026 = ₩674,000 based on data)
+  const ytdStart = 674000;
+  const ytdRet = pct(curP, ytdStart);
+  document.getElementById('bar-ytd-val').textContent = (ytdRet >= 0 ? '+' : '') + ytdRet?.toFixed(1) + '%';
+  document.getElementById('bar-ytd').style.width = Math.min(100, Math.abs(ytdRet)/3) + '%';
+
+  // 1Y bar (approx 1Y ago = ₩185,900)
+  const oneYStart = q.low52 || 185900;
+  const oneYRet = pct(curP, oneYStart);
+  document.getElementById('bar-1y-val').textContent = '+' + oneYRet?.toFixed(1) + '%';
+  document.getElementById('bar-1y').style.width = Math.min(100, oneYRet/5) + '%';
+
+  document.getElementById('last-updated').textContent = 'Updated: ' + new Date().toLocaleTimeString('en-GB',{timeZone:'Asia/Hong_Kong',hour:'2-digit',minute:'2-digit'}) + ' HKT';
+}
+
+// ═══════════════════════════════════════════════════
+// UPDATE UI — CHART
+// ═══════════════════════════════════════════════════
+function updateChart(history) {
+  const canvas = document.getElementById('priceChart');
+  if (!history || history.length === 0) {
+    document.getElementById('chart-period').textContent = '1Y — No data (set Alpha Vantage key)';
+    return;
+  }
+
+  // Thin out labels for readability
+  const step = Math.max(1, Math.floor(history.length / 13));
+  const labels = history.map((d,i) => i % step === 0 ? d.date : '');
+  const prices = history.map(d => d.price);
+  const first = prices[0], last = prices[prices.length-1];
+  const uptrend = last >= first;
+
+  document.getElementById('chart-period').textContent =
+    `1Y — ${fmtKRW(first)} → ${fmtKRW(last)} (${uptrend?'+':''}${pct(last,first)?.toFixed(1)}%)`;
+
+  if (priceChartInstance) { priceChartInstance.destroy(); priceChartInstance = null; }
+
+  priceChartInstance = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'SK Hynix KRW',
+        data: prices,
+        borderColor: uptrend ? '#00cc88' : '#ff4455',
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        fill: true,
+        backgroundColor: uptrend ? 'rgba(0,204,136,0.07)' : 'rgba(255,68,85,0.07)',
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0f1318',
+          borderColor: '#1e2840',
+          borderWidth: 1,
+          titleColor: '#ff7c00',
+          bodyColor: '#c8d4e8',
+          callbacks: { label: ctx => '₩' + Math.round(ctx.parsed.y).toLocaleString() }
+        }
+      },
+      scales: {
+        x: { grid: { color: '#1a2030' }, ticks: { color: '#4a5f78', font: { size: 9, family: 'Courier New' }, maxRotation: 0 }, border: { color: '#1e2840' } },
+        y: { grid: { color: '#1a2030' }, ticks: { color: '#7a8fa8', font: { size: 9, family: 'Courier New' }, callback: v => '₩' + (v/1000).toFixed(0) + 'K' }, border: { color: '#1e2840' } }
+      }
+    }
+  });
+
+  // Legend
+  const min = Math.min(...prices), max = Math.max(...prices);
+  document.getElementById('chart-legend').innerHTML =
+    `<span style="color:var(--text3)">Low: <span style="color:var(--down)">${fmtKRW(min)}</span></span>` +
+    `<span style="color:var(--text3)">High: <span style="color:var(--up)">${fmtKRW(max)}</span></span>` +
+    `<span style="color:var(--text3)">Current: <span style="color:var(--yellow)">${fmtKRW(last)}</span></span>` +
+    `<span style="color:var(--text3)">1Y Return: <span style="${uptrend?'color:var(--up)':'color:var(--down)'}">${uptrend?'+':''}${pct(last,first)?.toFixed(1)}%</span></span>`;
+}
+
+// ═══════════════════════════════════════════════════
+// UPDATE UI — NEWS
+// ═══════════════════════════════════════════════════
+function classifyNews(headline) {
+  const h = headline.toLowerCase();
+  const bullWords = ['record','surge','soar','rally','beat','strong','profit','revenue','hbm','ai','buy','upgrade','raise','target'];
+  const bearWords = ['miss','fall','drop','concern','risk','warn','competition','dilut','sell','downgrade'];
+  const bullScore = bullWords.filter(w => h.includes(w)).length;
+  const bearScore = bearWords.filter(w => h.includes(w)).length;
+  if (bullScore > bearScore) return {label:'▲ BULLISH', cls:'impact-bull'};
+  if (bearScore > bullScore) return {label:'▼ BEARISH', cls:'impact-bear'};
+  return {label:'◆ NEUTRAL', cls:'impact-neut'};
+}
+
+function updateNewsUI(newsItems) {
+  const col1 = document.getElementById('news-col-1');
+  const col2 = document.getElementById('news-col-2');
+
+  if (!newsItems || newsItems.length === 0) {
+    col1.innerHTML = `
+      <div class="news-item">
+        <div class="news-time">MAY 07, 2026 · CNBC</div>
+        <div class="news-head"><a href="https://www.cnbc.com/2026/04/23/sk-hynix-earnings-ai-memory-shortage-hbm-demand.html" target="_blank">SK Hynix Q1'26 record: Rev ₩52.6T (+198% YoY), OP ₩37.6T (+405%), Net ₩40.35T — ALL-TIME highs. Op margin 72%.</a></div>
+        <span class="news-impact impact-bull">▲ STRONGLY BULLISH</span>
+        <div class="news-sum">Revenue crossed ₩50T first time ever. AI demand overrode seasonal headwinds. All brokerages raised TPs post-results.</div>
+      </div>
+      <div class="news-item">
+        <div class="news-time">MAY 06, 2026 · REUTERS</div>
+        <div class="news-head">Altimeter Capital exits Microsoft, aggressively builds SK Hynix & Nvidia positions — signals AI hardware rotation</div>
+        <span class="news-impact impact-bull">▲ BULLISH</span>
+        <div class="news-sum">Smart money rotation into AI memory hardware validates premium valuation. "Ramageddon" RAM shortage — prices up 500%.</div>
+      </div>
+      <div class="news-item">
+        <div class="news-time">MAR 25, 2026 · CNBC</div>
+        <div class="news-head"><a href="https://www.cnbc.com/2026/03/25/sk-hynix-confidential-us-listing-adr-ai-memory.html" target="_blank">SK Hynix files confidentially with SEC for ADR listing; targets 2026 NYSE debut; CEO pledges ₩100T net cash</a></div>
+        <span class="news-impact impact-bull">▲ BULLISH</span>
+        <div class="news-sum">ADR listing → SOX ETF inclusion → structural global inflows. Dilution risk limited (ADR uses existing shares).</div>
+      </div>`;
+    col2.innerHTML = `
+      <div class="news-item">
+        <div class="news-time">MAR 16, 2026 · REUTERS / GTC 2026</div>
+        <div class="news-head">SK Group Chairman: Global chip wafer shortage to persist until 2030; SK Hynix secures lion's share of Nvidia's HBM4 initial orders</div>
+        <span class="news-impact impact-bull">▲ STRONGLY BULLISH</span>
+        <div class="news-sum">Supply shortage to 2030 + Nvidia exclusivity = sustained HBM pricing power. Multi-year earnings visibility is re-rating catalyst.</div>
+      </div>
+      <div class="news-item">
+        <div class="news-time">APR 29, 2026 · KED GLOBAL</div>
+        <div class="news-head">SK Hynix mulls $8B new share issuance for ADR; M15X fab Cheongju completed ahead of schedule; Indiana packaging on track</div>
+        <span class="news-impact impact-neut">◆ MIXED</span>
+        <div class="news-sum">$8B issuance = ~3-5% dilution risk. But capital deployed into HBM capacity expansion is growth-positive long term.</div>
+      </div>
+      <div class="news-item">
+        <div class="news-time">MAY 07, 2026 · GOOGLE FINANCE</div>
+        <div class="news-head">SK Hynix hits ₩1,654,000 ATH; foreign buying surges 12%; stock up 88% YTD as AI memory supercycle accelerates into Q2</div>
+        <span class="news-impact impact-bull">▲ STRONGLY BULLISH</span>
+        <div class="news-sum">ATH breakout + institutional FOMO. HBM shortage narrative intact. Next catalyst: Q2'26 earnings ~July 2026.</div>
+      </div>`;
+    document.getElementById('news-count').textContent = '6 items (static — add Finnhub key for live)';
+    return;
+  }
+
+  // Live Finnhub news
+  const half = Math.ceil(newsItems.length / 2);
+  const render = (items) => items.map(item => {
+    const impact = classifyNews(item.headline);
+    const d = new Date(item.datetime * 1000);
+    const dateStr = d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}).toUpperCase();
+    return `<div class="news-item">
+      <div class="news-time">${dateStr} · ${(item.source||'').toUpperCase()}</div>
+      <div class="news-head"><a href="${item.url}" target="_blank">${item.headline}</a></div>
+      <span class="news-impact ${impact.cls}">${impact.label}</span>
+      ${item.summary ? `<div class="news-sum">${item.summary.slice(0,160)}...</div>` : ''}
+    </div>`;
+  }).join('');
+
+  col1.innerHTML = render(newsItems.slice(0, half));
+  col2.innerHTML = render(newsItems.slice(half));
+  document.getElementById('news-count').textContent = `${newsItems.length} live items via Finnhub`;
+}
+
+// ═══════════════════════════════════════════════════
+// FALLBACK STATIC CHART DATA
+// ═══════════════════════════════════════════════════
+function getStaticHistory() {
+  return [
+    {date:"May'25",price:185900},{date:"Jun'25",price:230000},{date:"Jul'25",price:310000},
+    {date:"Aug'25",price:420000},{date:"Sep'25",price:510000},{date:"Oct'25",price:590000},
+    {date:"Nov'25",price:680000},{date:"Dec'25",price:820000},{date:"Jan'26",price:950000},
+    {date:"Feb'26",price:1100000},{date:"Mar'26",price:1250000},{date:"Apr'26",price:1520000},
+    {date:"May'26",price:1654000}
+  ];
+}
+
+// ═══════════════════════════════════════════════════
+// MAIN REFRESH
+// ═══════════════════════════════════════════════════
+async function refreshAll() {
+  document.getElementById('market-status').textContent = 'FETCHING...';
+  document.getElementById('last-updated').textContent = 'Refreshing...';
+
+  // Run all fetches in parallel
+  const [quote, newsItems, avHistory, yahooHistory] = await Promise.all([
+    fetchYahooQuote(),
+    fetchFinnhubNews(),
+    fetchAVHistory(),
+    fetchYahooHistory()
+  ]);
+
+  // Price / stats
+  updateQuoteUI(quote);
+
+  // Chart — prefer AV, then Yahoo, then static
+  const history = avHistory || yahooHistory || getStaticHistory();
+  updateChart(history);
+
+  // News
+  updateNewsUI(newsItems);
+
+  if (!quote) {
+    document.getElementById('price-source').textContent = 'STATIC DATA';
+    // Show static price as fallback
+    document.getElementById('price-display').textContent = '₩1,654,000';
+    document.getElementById('chg-display').textContent = '▲ +53,000 (+3.31%)';
+    document.getElementById('chg-display').className = 'ticker-chg up';
+    document.getElementById('kpi-price').textContent = '₩1,654,000';
+    document.getElementById('kpi-chg-pct').textContent = '+3.31% (static)';
+    document.getElementById('mktcap-display').textContent = 'MKTCAP ₩1,178T';
+    document.getElementById('kpi-52w').textContent = '₩185,900 – ₩1,665,000';
+    document.getElementById('kpi-pe').textContent = '27.4x';
+    document.getElementById('kpi-vol').textContent = '5.86M';
+    document.getElementById('kpi-mktcap').textContent = '1,178.8T';
+    document.getElementById('val-cur').textContent = '₩1,654,000';
+    document.getElementById('val-current-price').textContent = 'Current: ₩1,654,000';
+    document.getElementById('val-bull-up').textContent = '+81.4% upside'; document.getElementById('val-bull-up').className = 'val-upside up';
+    document.getElementById('val-base-up').textContent = '+20.9% upside'; document.getElementById('val-base-up').className = 'val-upside up';
+    document.getElementById('val-bear-up').textContent = '-30.5% downside'; document.getElementById('val-bear-up').className = 'val-upside dn';
+    document.getElementById('val-upside-avg').textContent = '+7.1%'; document.getElementById('val-upside-avg').className = 'fin-val up';
+    document.getElementById('bar-ytd-val').textContent = '+145.9%';
+    document.getElementById('bar-ytd').style.width = '85%';
+    document.getElementById('bar-1y-val').textContent = '+333.8%';
+    document.getElementById('bar-1y').style.width = '95%';
+    document.getElementById('market-status').textContent = 'STATIC';
+    document.getElementById('last-updated').textContent = 'Static data — add API keys in CONFIG';
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// AUTO-REFRESH SETUP
+// ═══════════════════════════════════════════════════
+function setupAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  const interval = parseInt(getCfg('interval', '900'));
+  if (interval > 0) {
+    refreshTimer = setInterval(refreshAll, interval * 1000);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  loadConfigUI();
+  setupAutoRefresh();
+  if (getCfg('autorefresh','1') === '1') {
+    refreshAll();
+  } else {
+    updateNewsUI(null);
+    updateChart(getStaticHistory());
+    // Show static fallback immediately
+    document.getElementById('price-display').textContent = '₩1,654,000';
+    document.getElementById('chg-display').textContent = '▲ +53,000 (+3.31%)';
+    document.getElementById('chg-display').className = 'ticker-chg up';
+    document.getElementById('market-status').textContent = 'STATIC';
+  }
+});
+</script>
+</body>
+</html>
